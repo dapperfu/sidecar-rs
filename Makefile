@@ -1,6 +1,7 @@
 .PHONY: clean build run test lint format format-fix check help
 
 CARGO := cargo
+export CARGO_TARGET_DIR ?= $(CURDIR)/target
 
 help:
 	@echo "Targets:"
