@@ -7,11 +7,16 @@ Binary sidecar files (`.scar`) for media metadata. SCAR (Sidecar Archive) v1 sto
 ```bash
 make build
 ./target/release/sidecar create photo.jpg
-./target/release/sidecar set photo.scar --f64 photo.gps.latitude=37.7749
-./target/release/sidecar get photo.scar photo.gps.latitude
-./target/release/sidecar list photo.scar
-./target/release/sidecar inspect photo.scar
+./target/release/sidecar set photo.jpg --f64 photo.gps.latitude=37.7749
+./target/release/sidecar get photo.jpg photo.gps.latitude
+./target/release/sidecar list photo.jpg
+./target/release/sidecar inspect photo.jpg
 ```
+
+The `set`, `get`, `list`, and `inspect` commands accept either the media file
+(e.g. `photo.jpg`) or the sidecar itself (`photo.scar`). When given a non-`.scar`
+path, the matching `.scar` sidecar is resolved automatically by swapping the
+extension.
 
 Run the library example:
 
