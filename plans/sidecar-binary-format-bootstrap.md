@@ -38,9 +38,9 @@ Scalars use fixed-width native little-endian encoding. Strings/bytes are length-
 ## Implementation Status
 
 - [x] Plan saved
-- [ ] Workspace skeleton
-- [ ] Library format codec
-- [ ] Photography conventions
-- [ ] CLI
-- [ ] Examples and integration tests
-- [ ] README and polish
+- [x] Workspace skeleton
+- [x] Library format codec
+- [x] Photography conventions
+- [x] CLI
+- [x] Examples and integration tests
+- [x] README and polish
