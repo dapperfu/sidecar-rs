@@ -1,0 +1,16 @@
+[package]
+name = "sidecar-cli"
+description = "Command-line tool for SCAR sidecar files"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "sidecar"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+sidecar = { path = "../sidecar" }
