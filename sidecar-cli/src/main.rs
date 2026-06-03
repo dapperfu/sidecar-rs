@@ -5,7 +5,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use sidecar::conventions::photo;
 use sidecar::format::value::Value;
-use sidecar::{sidecar_path_for_media, SidecarDocument, MEDIA_BASENAME_KEY};
+use sidecar::{sidecar_path_for_media, SidecarDocument, MEDIA_BASENAME_KEY, SIDECAR_EXTENSION};
 
 #[derive(Parser)]
 #[command(
@@ -29,7 +29,7 @@ enum Commands {
     },
     /// Set a typed field in a sidecar file
     Set {
-        /// Path to the sidecar file
+        /// Path to the media file or its sidecar (.scar resolved automatically)
         file: PathBuf,
         /// Set an f64 field (KEY=VALUE)
         #[arg(long)]
@@ -54,11 +54,21 @@ enum Commands {
         bytes: Option<String>,
     },
     /// Get a field value from a sidecar file
-    Get { file: PathBuf, key: String },
+    Get {
+        /// Path to the media file or its sidecar (.scar resolved automatically)
+        file: PathBuf,
+        key: String,
+    },
     /// List all keys in a sidecar file
-    List { file: PathBuf },
+    List {
+        /// Path to the media file or its sidecar (.scar resolved automatically)
+        file: PathBuf,
+    },
     /// Inspect header and catalog summary
-    Inspect { file: PathBuf },
+    Inspect {
+        /// Path to the media file or its sidecar (.scar resolved automatically)
+        file: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -130,7 +140,8 @@ fn cmd_set(args: SetArgs) -> Result<()> {
         str: str_arg,
         bytes,
     } = args;
-    let file = file.as_path();
+    let resolved = resolve_sidecar_path(&file);
+    let file = resolved.as_path();
     if let Some(v) = f64 {
         let (key, val) = parse_pair(&v, "f64")?;
         let mut doc = load_doc(file)?;
@@ -199,7 +210,8 @@ fn cmd_set(args: SetArgs) -> Result<()> {
 }
 
 fn cmd_get(file: &Path, key: &str) -> Result<()> {
-    let doc = load_doc(file)?;
+    let resolved = resolve_sidecar_path(file);
+    let doc = load_doc(&resolved)?;
     match doc.get(key) {
         Some(value) => println!("{}", format_value(value)),
         None => bail!("key not found: {key}"),
@@ -208,7 +220,8 @@ fn cmd_get(file: &Path, key: &str) -> Result<()> {
 }
 
 fn cmd_list(file: &Path) -> Result<()> {
-    let doc = load_doc(file)?;
+    let resolved = resolve_sidecar_path(file);
+    let doc = load_doc(&resolved)?;
     for (key, value) in doc.entries() {
         if key == MEDIA_BASENAME_KEY {
             continue;
@@ -219,7 +232,8 @@ fn cmd_list(file: &Path) -> Result<()> {
 }
 
 fn cmd_inspect(file: &Path) -> Result<()> {
-    let doc = load_doc(file)?;
+    let resolved = resolve_sidecar_path(file);
+    let doc = load_doc(&resolved)?;
     let header = doc.header_info();
     println!("SCAR v{}", header.version);
     println!("catalog_bytes: {}", header.catalog_len);
@@ -239,6 +253,18 @@ fn cmd_inspect(file: &Path) -> Result<()> {
     }
     let _ = photo::GPS_LATITUDE;
     Ok(())
+}
+
+/// Resolve the sidecar path from a user-supplied path.
+///
+/// If the path already has the `.scar` extension it is used verbatim; otherwise
+/// it is treated as a media file (e.g. `photo.jpg`) and the sidecar path is
+/// derived by swapping the extension to `.scar` (`photo.scar`).
+fn resolve_sidecar_path(path: &Path) -> PathBuf {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some(ext) if ext.eq_ignore_ascii_case(SIDECAR_EXTENSION) => path.to_path_buf(),
+        _ => sidecar_path_for_media(path),
+    }
 }
 
 fn load_doc(path: &Path) -> Result<SidecarDocument> {
