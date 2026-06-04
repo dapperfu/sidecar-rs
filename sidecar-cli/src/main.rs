@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use sidecar::conventions::photo;
 use sidecar::format::value::Value;
 use sidecar::{sidecar_path_for_media, SidecarDocument, MEDIA_BASENAME_KEY, SIDECAR_EXTENSION};
 
@@ -251,7 +250,6 @@ fn cmd_inspect(file: &Path) -> Result<()> {
             format_value(value)
         );
     }
-    let _ = photo::GPS_LATITUDE;
     Ok(())
 }
 
@@ -296,13 +294,7 @@ fn parse_bytes_pair(input: &str) -> Result<(String, PathBuf)> {
 }
 
 fn value_kind_label(value: &Value) -> &'static str {
-    match value {
-        Value::Array { element_kind, .. } => {
-            let _ = element_kind;
-            "Array"
-        }
-        other => other.kind().name(),
-    }
+    value.kind().name()
 }
 
 fn format_value(value: &Value) -> String {
