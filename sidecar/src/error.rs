@@ -5,35 +5,23 @@ pub enum SidecarError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("invalid magic bytes; expected SCAR")]
-    InvalidMagic,
+    #[error("CBOR encode error: {0}")]
+    Encode(String),
 
-    #[error("unsupported format version: {0}")]
-    UnsupportedVersion(u16),
+    #[error("CBOR decode error: {0}")]
+    Decode(String),
 
-    #[error("catalog truncated or malformed")]
-    InvalidCatalog,
+    #[error("sidecar document must be a CBOR map at the root")]
+    NotACborMap,
 
-    #[error("payload truncated or malformed")]
-    InvalidPayload,
-
-    #[error("invalid UTF-8 in key or string value")]
-    InvalidUtf8,
-
-    #[error("value kind mismatch: expected {expected}, got {actual}")]
-    KindMismatch { expected: String, actual: String },
-
-    #[error("payload reference out of bounds: offset {offset}, len {len}")]
-    PayloadOutOfBounds { offset: u32, len: u32 },
-
-    #[error("inline value exceeds maximum size of {max} bytes")]
-    InlineTooLarge { max: usize },
+    #[error("map key must be a UTF-8 string, got {0:?}")]
+    NonStringMapKey(String),
 
     #[error("empty key")]
     EmptyKey,
 
-    #[error("unsupported value kind tag: {0}")]
-    UnknownKindTag(u8),
+    #[error("integer value out of range for i128")]
+    IntegerOutOfRange,
 }
 
 pub type Result<T> = std::result::Result<T, SidecarError>;
@@ -43,8 +31,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn error_display_includes_version() {
-        let err = SidecarError::UnsupportedVersion(99);
-        assert!(err.to_string().contains("99"));
+    fn error_display_includes_context() {
+        let err = SidecarError::NotACborMap;
+        assert!(err.to_string().contains("CBOR map"));
     }
 }
