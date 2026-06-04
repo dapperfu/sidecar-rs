@@ -1,0 +1,27 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "sidecar-rs"
+description = "Python bindings for the SCAR binary sidecar format"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT OR Apache-2.0" }
+authors = [{ name = "sidecar-rs contributors" }]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+notebook = ["jupyter>=1.0", "nbconvert>=7.0"]
+
+[tool.maturin]
+module-name = "sidecar_rs._sidecar_rs"
+python-source = "python"
+manifest-path = "sidecar-py/Cargo.toml"
+features = ["extension-module"]
