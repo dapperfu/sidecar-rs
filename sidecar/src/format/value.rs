@@ -82,10 +82,7 @@ impl Value {
             Self::F64(_) => ValueKind::F64,
             Self::String(_) => ValueKind::String,
             Self::Bytes(_) => ValueKind::Bytes,
-            Self::Array { element_kind, .. } => {
-                let _ = element_kind;
-                ValueKind::Array
-            }
+            Self::Array { .. } => ValueKind::Array,
         }
     }
 
