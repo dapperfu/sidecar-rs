@@ -177,7 +177,7 @@ fn plan_storage(value: &Value) -> Result<EntryStorage> {
 fn write_entry<W: Write>(
     writer: &mut W,
     entry: &CatalogEntry,
-    payload: &PayloadArena,
+    _payload: &PayloadArena,
 ) -> Result<()> {
     let key_bytes = entry.key.as_bytes();
     write_u32(writer, key_bytes.len() as u32)?;
@@ -198,7 +198,6 @@ fn write_entry<W: Write>(
             writer.write_all(&[STORAGE_PAYLOAD])?;
             write_u32(writer, *offset)?;
             write_u32(writer, *len)?;
-            let _ = payload;
         }
     }
     Ok(())
