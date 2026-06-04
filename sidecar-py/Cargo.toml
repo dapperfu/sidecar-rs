@@ -1,0 +1,21 @@
+[package]
+name = "sidecar-py"
+description = "PyO3 Python bindings for the SCAR sidecar format"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+name = "_sidecar_rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+sidecar = { path = "../sidecar" }
+pyo3 = { workspace = true }
+
+[features]
+# Gated so `cargo build --workspace` / `cargo test --workspace` link against
+# libpython normally; maturin enables this feature when building wheels so the
+# extension module leaves Python symbols to be resolved by the interpreter.
+extension-module = ["pyo3/extension-module"]
