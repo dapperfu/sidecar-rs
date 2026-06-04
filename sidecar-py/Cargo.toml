@@ -11,6 +11,7 @@ name = "_sidecar_rs"
 crate-type = ["cdylib"]
 
 [dependencies]
+indexmap = { workspace = true }
 sidecar = { path = "../sidecar" }
 pyo3 = { workspace = true }
 
