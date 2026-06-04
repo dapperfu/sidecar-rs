@@ -1,3 +1,14 @@
 /target/
 **/*.rs.bk
 *.scar
+
+# Python / maturin
+__pycache__/
+*.py[cod]
+*.so
+venv_*/
+.venv/
+dist/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
