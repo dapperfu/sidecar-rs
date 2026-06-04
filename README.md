@@ -24,6 +24,49 @@ Run the library example:
 cargo run --example write_photo_metadata -p sidecar
 ```
 
+## Python bindings (`sidecar_rs`)
+
+The whole library is exposed to Python via PyO3 as the `sidecar_rs` module. The
+project is installable from the repository root with `pip` or `uv pip`:
+
+```bash
+uv pip install .            # or: pip install .
+```
+
+```python
+import sidecar_rs
+from sidecar_rs import SidecarDocument, conventions
+
+doc = SidecarDocument()
+doc.set(conventions.GPS_LATITUDE, 37.7749)   # types are inferred
+doc.set_f32(conventions.LENS_FOCAL_LENGTH_MM, 50.0)  # typed setter for precision
+doc.set(conventions.TAGS, ["spring", "outdoor"])
+doc.set_media_basename("photo.jpg")
+
+doc.to_path("photo.scar")
+blob = doc.to_bytes()
+
+restored = SidecarDocument.from_path("photo.scar")
+print(restored[conventions.GPS_LATITUDE])     # 37.7749
+print(dict(restored.entries()))
+```
+
+`SidecarDocument` behaves like a mapping (`len`, `in`, `doc[key]`, `del doc[key]`).
+Generic `set()` infers the SCAR type (`bool`, `int` -> `I64`/`U64`, `float` -> `F64`,
+`str`, `bytes`, homogeneous `list`); typed setters (`set_f32`, `set_u64`, ...) give
+exact control. Invalid data raises `sidecar_rs.SidecarError`.
+
+A runnable walkthrough lives in [notebooks/sidecar_demo.ipynb](notebooks/sidecar_demo.ipynb).
+
+### Python development
+
+```bash
+make py-install      # uv pip install . into venv_sidecar-rs
+make py-test         # run the pytest suite
+make py-wheel        # build a release wheel
+make py-notebook-run # execute the demo notebook headlessly
+```
+
 ## SCAR v1 file layout
 
 ```
@@ -68,6 +111,7 @@ The library provides well-known keys under `sidecar::conventions::photo` (e.g. `
 |-------|---------|
 | `sidecar` | Library: read/write SCAR documents |
 | `sidecar-cli` | Command-line tool (`sidecar` binary) |
+| `sidecar-py` | PyO3 bindings for the `sidecar_rs` Python module |
 
 ## Development
 
