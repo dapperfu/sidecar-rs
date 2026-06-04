@@ -13,4 +13,6 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
+indexmap = { workspace = true }
+serde_json = { workspace = true }
 sidecar = { path = "../sidecar" }
