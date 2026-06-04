@@ -39,7 +39,7 @@ def test_bool_is_not_treated_as_int() -> None:
     assert isinstance(value, bool)
 
 
-def test_typed_setters_f32_vs_f64() -> None:
+def test_typed_setters_store_canonical_cbor_types() -> None:
     doc = SidecarDocument()
     doc.set_f32("f32", 0.5)
     doc.set_f64("f64", 0.5)
@@ -49,17 +49,17 @@ def test_typed_setters_f32_vs_f64() -> None:
 
 
 def test_u64_large_value() -> None:
-    big = 2**63 + 7  # larger than i64::MAX, fits in u64
+    big = 2**63 + 7
     doc = SidecarDocument()
     doc.set("big", big)
     restored = SidecarDocument.from_bytes(doc.to_bytes())
     assert restored["big"] == big
 
 
-def test_overflow_beyond_u64_raises() -> None:
+def test_overflow_beyond_i128_raises() -> None:
     doc = SidecarDocument()
     with pytest.raises(OverflowError):
-        doc.set("too_big", 2**64 + 1)
+        doc.set("too_big", 2**128)
 
 
 def test_string_array_roundtrip() -> None:
@@ -69,11 +69,28 @@ def test_string_array_roundtrip() -> None:
     assert restored["tags"] == ["spring", "outdoor", "macro"]
 
 
-def test_float_array_roundtrip() -> None:
+def test_heterogeneous_array_roundtrip() -> None:
     doc = SidecarDocument()
-    doc.set_array("coords", [1.0, 2.5, 3.25])
+    doc.set("mixed", [1, "two", 3.0])
     restored = SidecarDocument.from_bytes(doc.to_bytes())
-    assert restored["coords"] == [1.0, 2.5, 3.25]
+    assert restored["mixed"] == [1, "two", 3.0]
+
+
+def test_nested_dict_roundtrip() -> None:
+    doc = SidecarDocument()
+    doc.set("config", {"window": {"width": 800, "height": 600}, "enabled": True})
+    restored = SidecarDocument.from_bytes(doc.to_bytes())
+    assert restored["config"] == {
+        "window": {"width": 800, "height": 600},
+        "enabled": True,
+    }
+
+
+def test_set_map_explicit() -> None:
+    doc = SidecarDocument()
+    doc.set_map("meta", {"a": 1, "b": "two"})
+    restored = SidecarDocument.from_bytes(doc.to_bytes())
+    assert restored["meta"] == {"a": 1, "b": "two"}
 
 
 def test_empty_array_roundtrip() -> None:
@@ -81,12 +98,6 @@ def test_empty_array_roundtrip() -> None:
     doc.set("empty", [])
     restored = SidecarDocument.from_bytes(doc.to_bytes())
     assert restored["empty"] == []
-
-
-def test_non_homogeneous_array_raises() -> None:
-    doc = SidecarDocument()
-    with pytest.raises(TypeError):
-        doc.set("mixed", [1, "two", 3.0])
 
 
 def test_mapping_dunders() -> None:
@@ -136,9 +147,9 @@ def test_header_fields() -> None:
     doc = SidecarDocument()
     doc.set("k", 1)
     header = doc.header()
-    assert header["version"] == 1
+    assert header["format"] == "cbor"
     assert header["entry_count"] == 1
-    assert header["catalog_len"] > 0
+    assert header["byte_len"] > 0
 
 
 def test_file_roundtrip(tmp_path: Path) -> None:
@@ -161,7 +172,7 @@ def test_photography_conventions_values() -> None:
 
 def test_bad_bytes_raise_sidecar_error() -> None:
     with pytest.raises(SidecarError):
-        SidecarDocument.from_bytes(b"not a scar file")
+        SidecarDocument.from_bytes(b"not valid cbor")
 
 
 def test_repr() -> None:
