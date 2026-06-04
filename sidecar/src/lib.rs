@@ -1,13 +1,13 @@
-//! Binary sidecar format (SCAR v1) for media metadata.
+//! CBOR sidecar format for media metadata.
 
 pub mod conventions;
 pub mod document;
 pub mod error;
-pub mod format;
+pub mod value;
 
 pub use document::SidecarDocument;
 pub use error::{Result, SidecarError};
-pub use format::value::{Value, ValueKind};
+pub use value::Value;
 
 /// Reserved catalog key for linked media basename.
 pub const MEDIA_BASENAME_KEY: &str = "_media.basename";
