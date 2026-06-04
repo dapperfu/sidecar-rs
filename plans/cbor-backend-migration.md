@@ -30,13 +30,13 @@ flowchart LR
 
 ## Implementation Status
 
-- [ ] Plan saved
-- [ ] Dependencies
-- [ ] Value model
-- [ ] Document codec
-- [ ] Errors
-- [ ] Remove format module
-- [ ] CLI
-- [ ] Python bindings
-- [ ] Tests
-- [ ] Docs and version bump
+- [x] Plan saved
+- [x] Dependencies
+- [x] Value model
+- [x] Document codec
+- [x] Errors
+- [x] Remove format module
+- [x] CLI
+- [x] Python bindings
+- [x] Tests
+- [x] Docs and version bump
