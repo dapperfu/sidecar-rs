@@ -3,14 +3,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use sidecar::format::value::Value;
-use sidecar::{sidecar_path_for_media, SidecarDocument, MEDIA_BASENAME_KEY, SIDECAR_EXTENSION};
+use indexmap::IndexMap;
+use sidecar::{
+    sidecar_path_for_media, SidecarDocument, Value, MEDIA_BASENAME_KEY, SIDECAR_EXTENSION,
+};
 
 #[derive(Parser)]
-#[command(
-    name = "sidecar",
-    about = "Create and inspect SCAR binary sidecar files"
-)]
+#[command(name = "sidecar", about = "Create and inspect CBOR sidecar files")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -51,6 +50,9 @@ enum Commands {
         /// Set a bytes field from file (KEY=@path)
         #[arg(long)]
         bytes: Option<String>,
+        /// Set a value from JSON (KEY=<json>, supports nested maps and arrays)
+        #[arg(long)]
+        json: Option<String>,
     },
     /// Get a field value from a sidecar file
     Get {
@@ -63,7 +65,7 @@ enum Commands {
         /// Path to the media file or its sidecar (.scar resolved automatically)
         file: PathBuf,
     },
-    /// Inspect header and catalog summary
+    /// Inspect document summary and catalog
     Inspect {
         /// Path to the media file or its sidecar (.scar resolved automatically)
         file: PathBuf,
@@ -83,6 +85,7 @@ fn main() -> Result<()> {
             bool: bool_arg,
             str,
             bytes,
+            json,
         } => cmd_set(SetArgs {
             file,
             f64,
@@ -92,6 +95,7 @@ fn main() -> Result<()> {
             bool_arg,
             str,
             bytes,
+            json,
         }),
         Commands::Get { file, key } => cmd_get(&file, &key),
         Commands::List { file } => cmd_list(&file),
@@ -126,6 +130,7 @@ struct SetArgs {
     bool_arg: Option<String>,
     str: Option<String>,
     bytes: Option<String>,
+    json: Option<String>,
 }
 
 fn cmd_set(args: SetArgs) -> Result<()> {
@@ -138,13 +143,14 @@ fn cmd_set(args: SetArgs) -> Result<()> {
         bool_arg,
         str: str_arg,
         bytes,
+        json,
     } = args;
     let resolved = resolve_sidecar_path(&file);
     let file = resolved.as_path();
     if let Some(v) = f64 {
         let (key, val) = parse_pair(&v, "f64")?;
         let mut doc = load_doc(file)?;
-        doc.set(key, Value::F64(val.parse().context("invalid f64")?))
+        doc.set(key, Value::Float(val.parse().context("invalid f64")?))
             .context("failed to set value")?;
         save_doc(&doc, file)?;
         return Ok(());
@@ -152,7 +158,7 @@ fn cmd_set(args: SetArgs) -> Result<()> {
     if let Some(v) = f32 {
         let (key, val) = parse_pair(&v, "f32")?;
         let mut doc = load_doc(file)?;
-        doc.set(key, Value::F32(val.parse().context("invalid f32")?))
+        doc.set(key, Value::Float(val.parse().context("invalid f32")?))
             .context("failed to set value")?;
         save_doc(&doc, file)?;
         return Ok(());
@@ -160,7 +166,7 @@ fn cmd_set(args: SetArgs) -> Result<()> {
     if let Some(v) = u64 {
         let (key, val) = parse_pair(&v, "u64")?;
         let mut doc = load_doc(file)?;
-        doc.set(key, Value::U64(val.parse().context("invalid u64")?))
+        doc.set(key, Value::Integer(val.parse().context("invalid u64")?))
             .context("failed to set value")?;
         save_doc(&doc, file)?;
         return Ok(());
@@ -168,7 +174,7 @@ fn cmd_set(args: SetArgs) -> Result<()> {
     if let Some(v) = i64 {
         let (key, val) = parse_pair(&v, "i64")?;
         let mut doc = load_doc(file)?;
-        doc.set(key, Value::I64(val.parse().context("invalid i64")?))
+        doc.set(key, Value::Integer(val.parse().context("invalid i64")?))
             .context("failed to set value")?;
         save_doc(&doc, file)?;
         return Ok(());
@@ -189,7 +195,7 @@ fn cmd_set(args: SetArgs) -> Result<()> {
     if let Some(v) = str_arg {
         let (key, val) = parse_pair(&v, "str")?;
         let mut doc = load_doc(file)?;
-        doc.set(key, Value::String(val))
+        doc.set(key, Value::Text(val))
             .context("failed to set value")?;
         save_doc(&doc, file)?;
         return Ok(());
@@ -204,8 +210,17 @@ fn cmd_set(args: SetArgs) -> Result<()> {
         save_doc(&doc, file)?;
         return Ok(());
     }
+    if let Some(v) = json {
+        let (key, val) = parse_pair(&v, "json")?;
+        let parsed: serde_json::Value = serde_json::from_str(&val).context("invalid JSON value")?;
+        let mut doc = load_doc(file)?;
+        doc.set(key, json_to_value(&parsed)?)
+            .context("failed to set value")?;
+        save_doc(&doc, file)?;
+        return Ok(());
+    }
 
-    bail!("specify one of --f64, --f32, --u64, --i64, --bool, --str, or --bytes")
+    bail!("specify one of --f64, --f32, --u64, --i64, --bool, --str, --bytes, or --json")
 }
 
 fn cmd_get(file: &Path, key: &str) -> Result<()> {
@@ -225,7 +240,7 @@ fn cmd_list(file: &Path) -> Result<()> {
         if key == MEDIA_BASENAME_KEY {
             continue;
         }
-        println!("{}\t{}", key, value_kind_label(value));
+        println!("{}\t{}", key, value.type_name());
     }
     Ok(())
 }
@@ -233,31 +248,23 @@ fn cmd_list(file: &Path) -> Result<()> {
 fn cmd_inspect(file: &Path) -> Result<()> {
     let resolved = resolve_sidecar_path(file);
     let doc = load_doc(&resolved)?;
-    let header = doc.header_info();
-    println!("SCAR v{}", header.version);
-    println!("catalog_bytes: {}", header.catalog_len);
-    println!("payload_bytes: {}", header.payload_len);
+    println!("format: CBOR");
     println!("entries: {}", doc.entry_count());
+    println!(
+        "byte_len: {}",
+        doc.byte_len().context("failed to measure size")?
+    );
     if let Some(basename) = doc.media_basename() {
         println!("media: {basename}");
     }
     println!("--- catalog ---");
     for (key, value) in doc.entries() {
-        println!(
-            "  {}: {} = {}",
-            key,
-            value_kind_label(value),
-            format_value(value)
-        );
+        println!("  {}: {} = {}", key, value.type_name(), format_value(value));
     }
     Ok(())
 }
 
 /// Resolve the sidecar path from a user-supplied path.
-///
-/// If the path already has the `.scar` extension it is used verbatim; otherwise
-/// it is treated as a media file (e.g. `photo.jpg`) and the sidecar path is
-/// derived by swapping the extension to `.scar` (`photo.scar`).
 fn resolve_sidecar_path(path: &Path) -> PathBuf {
     match path.extension().and_then(|e| e.to_str()) {
         Some(ext) if ext.eq_ignore_ascii_case(SIDECAR_EXTENSION) => path.to_path_buf(),
@@ -293,23 +300,60 @@ fn parse_bytes_pair(input: &str) -> Result<(String, PathBuf)> {
     Ok((key.to_string(), PathBuf::from(path)))
 }
 
-fn value_kind_label(value: &Value) -> &'static str {
-    value.kind().name()
+fn json_to_value(json: &serde_json::Value) -> Result<Value> {
+    match json {
+        serde_json::Value::Null => Ok(Value::Null),
+        serde_json::Value::Bool(v) => Ok(Value::Bool(*v)),
+        serde_json::Value::Number(n) => {
+            if let Some(v) = n.as_i64() {
+                Ok(Value::Integer(v as i128))
+            } else if let Some(v) = n.as_u64() {
+                Ok(Value::Integer(v as i128))
+            } else if let Some(v) = n.as_f64() {
+                Ok(Value::Float(v))
+            } else {
+                bail!("unsupported JSON number");
+            }
+        }
+        serde_json::Value::String(v) => Ok(Value::Text(v.clone())),
+        serde_json::Value::Array(items) => {
+            let elements = items
+                .iter()
+                .map(json_to_value)
+                .collect::<Result<Vec<_>>>()?;
+            Ok(Value::Array(elements))
+        }
+        serde_json::Value::Object(map) => {
+            let mut entries = IndexMap::with_capacity(map.len());
+            for (key, val) in map {
+                if key.is_empty() {
+                    bail!("JSON object key must not be empty");
+                }
+                entries.insert(key.clone(), json_to_value(val)?);
+            }
+            Ok(Value::Map(entries))
+        }
+    }
 }
 
 fn format_value(value: &Value) -> String {
     match value {
         Value::Null => "null".into(),
         Value::Bool(v) => v.to_string(),
-        Value::I64(v) => v.to_string(),
-        Value::U64(v) => v.to_string(),
-        Value::F32(v) => v.to_string(),
-        Value::F64(v) => v.to_string(),
-        Value::String(v) => v.clone(),
+        Value::Integer(v) => v.to_string(),
+        Value::Float(v) => v.to_string(),
+        Value::Text(v) => v.clone(),
         Value::Bytes(v) => format!("<bytes len={}>", v.len()),
-        Value::Array { elements, .. } => {
+        Value::Array(elements) => {
             let parts: Vec<String> = elements.iter().map(format_value).collect();
             format!("[{}]", parts.join(", "))
+        }
+        Value::Map(map) => {
+            let parts: Vec<String> = map
+                .iter()
+                .map(|(k, v)| format!("{k}: {}", format_value(v)))
+                .collect();
+            format!("{{{}}}", parts.join(", "))
         }
     }
 }
