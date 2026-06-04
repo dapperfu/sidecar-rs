@@ -101,15 +101,15 @@ error handling, cleanup. Verified via `nbconvert --execute`.
 
 ## Implementation Status
 
-- [ ] Plan saved
-- [ ] Workspace wiring
-- [ ] Crate bootstrap
-- [ ] Bindings
-- [ ] pyproject
-- [ ] Python package
-- [ ] Tests
-- [ ] Notebook
-- [ ] Tooling and docs
-- [ ] Cleanup
-- [ ] Sanity check
-- [ ] Release tag v0.1.0
+- [x] Plan saved
+- [x] Workspace wiring
+- [x] Crate bootstrap
+- [x] Bindings
+- [x] pyproject
+- [x] Python package
+- [x] Tests
+- [x] Notebook
+- [x] Tooling and docs
+- [x] Cleanup
+- [x] Sanity check
+- [x] Release tag v0.1.0
