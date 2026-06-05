@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from os import PathLike
+from collections.abc import Callable
 from typing import Any
 
 from . import conventions as conventions
@@ -24,6 +25,11 @@ class SidecarDocument:
     def from_bytes(data: bytes) -> SidecarDocument: ...
     @staticmethod
     def from_path(path: str | PathLike[str]) -> SidecarDocument: ...
+    @staticmethod
+    def update_path(
+        path: str | PathLike[str],
+        updater: Callable[[SidecarDocument], None],
+    ) -> None: ...
     def to_bytes(self) -> bytes: ...
     def to_path(self, path: str | PathLike[str]) -> None: ...
     def set(self, key: str, value: Any) -> None: ...
