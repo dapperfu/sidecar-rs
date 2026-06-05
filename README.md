@@ -50,6 +50,11 @@ blob = doc.to_bytes()
 restored = SidecarDocument.from_path("photo.scar")
 print(restored[conventions.GPS_LATITUDE])     # 37.7749
 print(dict(restored.entries()))
+
+def add_pose(doc: SidecarDocument) -> None:
+    doc.set("pose.yolo.model", "yolo11n-pose")
+
+SidecarDocument.update_path("photo.scar", add_pose)  # locked merge; safe across processes
 ```
 
 `SidecarDocument` behaves like a mapping (`len`, `in`, `doc[key]`, `del doc[key]`).
@@ -114,6 +119,6 @@ make clean    # remove artifacts
 - Map keys must be strings (CBOR text keys)
 - Integer values are stored as CBOR integers (canonical `Integer` type on read)
 - `set_f32` / `set_f64` both round-trip as CBOR floats; `set_i64` / `set_u64` as integers
-- No concurrent write coordination (last writer wins)
+- Concurrent updates: use `SidecarDocument.update_path(path, updater)` (exclusive `{path}.lock`, atomic replace); requires sidecar-rs ≥ 0.2.1
 - No XMP import/export
 - Not compatible with v0.1.0 custom SCAR binary files
