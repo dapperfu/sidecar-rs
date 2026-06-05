@@ -184,3 +184,63 @@ def test_repr() -> None:
 def test_module_constants() -> None:
     assert sidecar_rs.SIDECAR_EXTENSION == "scar"
     assert sidecar_rs.MEDIA_BASENAME_KEY == "_media.basename"
+
+
+def test_update_path_merges_namespaces(tmp_path: Path) -> None:
+    path = tmp_path / "photo.scar"
+
+    def write_pose(doc: SidecarDocument) -> None:
+        doc.set("pose.yolo.model", "yolo")
+
+    def write_face(doc: SidecarDocument) -> None:
+        doc.set("face.scrfd.version", "1.0.0")
+
+    SidecarDocument.update_path(path, write_pose)
+    SidecarDocument.update_path(path, write_face)
+
+    restored = SidecarDocument.from_path(path)
+    assert restored["pose.yolo.model"] == "yolo"
+    assert restored["face.scrfd.version"] == "1.0.0"
+
+
+def test_concurrent_update_path_preserves_both_namespaces(tmp_path: Path) -> None:
+    import threading
+
+    path = tmp_path / "photo.scar"
+    errors: list[BaseException] = []
+
+    def write_pose() -> None:
+        try:
+            for _ in range(50):
+
+                def apply(doc: SidecarDocument) -> None:
+                    doc.set("pose.yolo.model", "yolo")
+
+                SidecarDocument.update_path(path, apply)
+        except BaseException as exc:
+            errors.append(exc)
+
+    def write_face() -> None:
+        try:
+            for _ in range(50):
+
+                def apply(doc: SidecarDocument) -> None:
+                    doc.set("face.scrfd.version", "1.0.0")
+
+                SidecarDocument.update_path(path, apply)
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads: list[threading.Thread] = []
+    for _ in range(8):
+        threads.append(threading.Thread(target=write_pose))
+        threads.append(threading.Thread(target=write_face))
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not errors
+    restored = SidecarDocument.from_path(path)
+    assert restored["pose.yolo.model"] == "yolo"
+    assert restored["face.scrfd.version"] == "1.0.0"
