@@ -17,6 +17,10 @@ fn map_err(err: sidecar::SidecarError) -> PyErr {
     SidecarError::new_err(err.to_string())
 }
 
+fn callback_err() -> sidecar::SidecarError {
+    sidecar::SidecarError::Decode("python update_path callback failed".into())
+}
+
 /// Convert a sidecar `Value` into an owned Python object.
 fn value_to_py(py: Python<'_>, value: &Value) -> PyResult<Py<PyAny>> {
     match value {
@@ -143,6 +147,32 @@ impl PySidecarDocument {
     fn from_path(path: PathBuf) -> PyResult<Self> {
         let inner = SidecarDocument::from_path(&path).map_err(map_err)?;
         Ok(Self { inner })
+    }
+
+    /// Load `path` under a file lock, call `updater(doc)`, and atomically save.
+    #[staticmethod]
+    fn update_path(py: Python<'_>, path: PathBuf, updater: &Bound<'_, PyAny>) -> PyResult<()> {
+        let py_err = std::cell::Cell::new(None::<PyErr>);
+        let rust_result = SidecarDocument::update_path(&path, |doc| {
+            let py_doc = PySidecarDocument { inner: doc.clone() };
+            let py_obj = match Py::new(py, py_doc) {
+                Ok(obj) => obj,
+                Err(err) => {
+                    py_err.set(Some(err));
+                    return Err(callback_err());
+                }
+            };
+            if let Err(err) = updater.call1((py_obj.clone_ref(py),)) {
+                py_err.set(Some(err));
+                return Err(callback_err());
+            }
+            *doc = py_obj.borrow(py).inner.clone();
+            Ok(())
+        });
+        if let Some(err) = py_err.take() {
+            return Err(err);
+        }
+        rust_result.map_err(map_err)
     }
 
     fn to_bytes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
