@@ -9,7 +9,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 use sidecar::conventions::photo;
-use sidecar::{SidecarDocument, Value};
+use sidecar::{resolve_sidecar_path, SidecarDocument, Value};
 
 create_exception!(_sidecar_rs, SidecarError, PyException);
 
@@ -311,9 +311,18 @@ impl PySidecarDocument {
     }
 }
 
+#[pyfunction]
+#[pyo3(name = "resolve_sidecar_path")]
+fn py_resolve_sidecar_path(path: &str) -> PyResult<String> {
+    Ok(resolve_sidecar_path(std::path::Path::new(path))
+        .display()
+        .to_string())
+}
+
 #[pymodule]
 fn _sidecar_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySidecarDocument>()?;
+    m.add_function(wrap_pyfunction!(py_resolve_sidecar_path, m)?)?;
     m.add("SidecarError", m.py().get_type::<SidecarError>())?;
 
     m.add("MEDIA_BASENAME_KEY", sidecar::MEDIA_BASENAME_KEY)?;

@@ -5,7 +5,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use indexmap::IndexMap;
 use sidecar::{
-    sidecar_path_for_media, SidecarDocument, Value, MEDIA_BASENAME_KEY, SIDECAR_EXTENSION,
+    resolve_sidecar_path, sidecar_path_for_media, SidecarDocument, Value, MEDIA_BASENAME_KEY,
 };
 
 #[derive(Parser)]
@@ -262,14 +262,6 @@ fn cmd_inspect(file: &Path) -> Result<()> {
         println!("  {}: {} = {}", key, value.type_name(), format_value(value));
     }
     Ok(())
-}
-
-/// Resolve the sidecar path from a user-supplied path.
-fn resolve_sidecar_path(path: &Path) -> PathBuf {
-    match path.extension().and_then(|e| e.to_str()) {
-        Some(ext) if ext.eq_ignore_ascii_case(SIDECAR_EXTENSION) => path.to_path_buf(),
-        _ => sidecar_path_for_media(path),
-    }
 }
 
 fn load_doc(path: &Path) -> Result<SidecarDocument> {

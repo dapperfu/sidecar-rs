@@ -12,6 +12,7 @@ from ._sidecar_rs import (
     SIDECAR_EXTENSION,
     SidecarDocument,
     SidecarError,
+    resolve_sidecar_path,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "MEDIA_BASENAME_KEY",
     "SIDECAR_EXTENSION",
     "conventions",
+    "resolve_sidecar_path",
 ]

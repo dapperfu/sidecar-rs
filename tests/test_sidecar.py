@@ -244,3 +244,26 @@ def test_concurrent_update_path_preserves_both_namespaces(tmp_path: Path) -> Non
     restored = SidecarDocument.from_path(path)
     assert restored["pose.yolo.model"] == "yolo"
     assert restored["face.scrfd.version"] == "1.0.0"
+
+
+def test_resolve_sidecar_path_symlink(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    album = tmp_path / "album"
+    vault.mkdir()
+    album.mkdir()
+
+    target_media = vault / "photo.jpg"
+    target_media.write_bytes(b"data")
+    link_media = album / "link.jpg"
+    link_media.symlink_to(target_media)
+
+    target_scar = vault / "photo.scar"
+    doc = SidecarDocument()
+    doc.set("source", "target")
+    doc.to_path(target_scar)
+
+    assert sidecar_rs.resolve_sidecar_path(str(link_media)) == str(target_scar)
+    restored = SidecarDocument.from_path(
+        sidecar_rs.resolve_sidecar_path(str(link_media))
+    )
+    assert restored["source"] == "target"

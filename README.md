@@ -17,7 +17,9 @@ make build
 The `set`, `get`, `list`, and `inspect` commands accept either the media file
 (e.g. `photo.jpg`) or the sidecar itself (`photo.scar`). When given a non-`.scar`
 path, the matching `.scar` sidecar is resolved automatically by swapping the
-extension.
+extension. When the media file is a symlink, resolution also checks beside the
+link target (first) and beside the symlink itself; reads and updates use
+whichever sidecar file is found.
 
 Run the library example:
 
