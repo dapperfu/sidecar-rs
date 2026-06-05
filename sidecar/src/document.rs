@@ -68,6 +68,15 @@ impl SidecarDocument {
         Ok(())
     }
 
+    /// Load `path` under an exclusive lock, apply `apply`, and atomically replace the file.
+    pub fn update_path<P, F>(path: P, apply: F) -> Result<()>
+    where
+        P: AsRef<Path>,
+        F: FnMut(&mut Self) -> Result<()>,
+    {
+        crate::locked_io::update_path(path, apply)
+    }
+
     pub fn byte_len(&self) -> Result<usize> {
         let mut buf = Vec::new();
         self.to_writer(&mut buf)?;

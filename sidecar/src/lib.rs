@@ -3,9 +3,11 @@
 pub mod conventions;
 pub mod document;
 pub mod error;
+pub mod locked_io;
 pub mod value;
 
 pub use document::SidecarDocument;
+pub use locked_io::update_path;
 pub use error::{Result, SidecarError};
 pub use value::Value;
 
