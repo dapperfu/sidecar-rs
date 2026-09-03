@@ -456,7 +456,7 @@ dependencies = [
 
 [[package]]
 name = "sidecar"
-version = "0.2.2"
+version = "0.2.4"
 dependencies = [
  "ciborium",
  "indexmap",
@@ -467,7 +467,7 @@ dependencies = [
 
 [[package]]
 name = "sidecar-cli"
-version = "0.2.2"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -478,7 +478,7 @@ dependencies = [
 
 [[package]]
 name = "sidecar-py"
-version = "0.2.2"
+version = "0.2.4"
 dependencies = [
  "indexmap",
  "pyo3",
