@@ -201,6 +201,7 @@ def test_update_path_merges_namespaces(tmp_path: Path) -> None:
     restored = SidecarDocument.from_path(path)
     assert restored["pose.yolo.model"] == "yolo"
     assert restored["face.scrfd.version"] == "1.0.0"
+    assert not (tmp_path / "photo.scar.lock").exists()
 
 
 def test_concurrent_update_path_preserves_both_namespaces(tmp_path: Path) -> None:
@@ -244,6 +245,32 @@ def test_concurrent_update_path_preserves_both_namespaces(tmp_path: Path) -> Non
     restored = SidecarDocument.from_path(path)
     assert restored["pose.yolo.model"] == "yolo"
     assert restored["face.scrfd.version"] == "1.0.0"
+    assert not (tmp_path / "photo.scar.lock").exists()
+
+
+def test_update_path_removes_lock_file(tmp_path: Path) -> None:
+    path = tmp_path / "photo.scar"
+    lock_path = tmp_path / "photo.scar.lock"
+
+    def write_one(doc: SidecarDocument) -> None:
+        doc.set("k", 1)
+
+    SidecarDocument.update_path(path, write_one)
+    assert path.is_file()
+    assert not lock_path.exists()
+
+
+def test_update_path_removes_lock_file_on_callback_error(tmp_path: Path) -> None:
+    path = tmp_path / "photo.scar"
+    lock_path = tmp_path / "photo.scar.lock"
+
+    def boom(_doc: SidecarDocument) -> None:
+        raise RuntimeError("callback failed")
+
+    with pytest.raises(RuntimeError, match="callback failed"):
+        SidecarDocument.update_path(path, boom)
+    assert not path.exists()
+    assert not lock_path.exists()
 
 
 def test_resolve_sidecar_path_symlink(tmp_path: Path) -> None:
