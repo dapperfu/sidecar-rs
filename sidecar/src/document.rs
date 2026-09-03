@@ -69,12 +69,27 @@ impl SidecarDocument {
     }
 
     /// Load `path` under an exclusive lock, apply `apply`, and atomically replace the file.
+    ///
+    /// Waits up to 10 seconds for `{path}.lock`. See [`update_path_with_timeout`].
     pub fn update_path<P, F>(path: P, apply: F) -> Result<()>
     where
         P: AsRef<Path>,
         F: FnMut(&mut Self) -> Result<()>,
     {
         crate::locked_io::update_path(path, apply)
+    }
+
+    /// Same as [`Self::update_path`] with an explicit lock wait.
+    pub fn update_path_with_timeout<P, F>(
+        path: P,
+        timeout: std::time::Duration,
+        apply: F,
+    ) -> Result<()>
+    where
+        P: AsRef<Path>,
+        F: FnMut(&mut Self) -> Result<()>,
+    {
+        crate::locked_io::update_path_with_timeout(path, timeout, apply)
     }
 
     pub fn byte_len(&self) -> Result<usize> {
