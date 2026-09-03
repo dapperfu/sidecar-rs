@@ -1,5 +1,6 @@
 .PHONY: clean build run test lint format format-fix check help \
-        py-venv py-install py-build py-test py-wheel py-notebook py-notebook-run py-clean
+        py-venv py-install py-build py-test py-wheel py-notebook py-notebook-run py-clean \
+        bench-locks
 
 CARGO := cargo
 export CARGO_TARGET_DIR ?= $(CURDIR)/target
@@ -26,7 +27,7 @@ help:
 	@echo "  make py-wheel        - Build a release wheel (maturin build --release)"
 	@echo "  make py-notebook     - Launch the demo notebook in Jupyter"
 	@echo "  make py-notebook-run - Execute the demo notebook headlessly"
-	@echo "  make py-clean        - Remove the venv and Python build artifacts"
+	@echo "  make bench-locks     - Lock/unlock .scar files under DIR (default /tun/pictures)"
 
 clean:
 	$(CARGO) clean
@@ -51,6 +52,11 @@ format-fix:
 
 check:
 	$(CARGO) check --workspace
+
+DIR ?= /tun/pictures
+
+bench-locks:
+	$(CARGO) run --release -p sidecar --example bench_dir_locks -- $(DIR)
 
 py-venv:
 	$(UV) venv $(VENV)

@@ -121,6 +121,6 @@ make clean    # remove artifacts
 - Map keys must be strings (CBOR text keys)
 - Integer values are stored as CBOR integers (canonical `Integer` type on read)
 - `set_f32` / `set_f64` both round-trip as CBOR floats; `set_i64` / `set_u64` as integers
-- Concurrent updates: use `SidecarDocument.update_path(path, updater)` (exclusive `{path}.lock` during the write, then the lock file is removed; atomic replace); requires sidecar-rs ≥ 0.2.1
+- Concurrent updates: use `SidecarDocument.update_path(path, updater, lock_timeout_s=10)` (exclusive `{path}.lock` during the write, then the lock file is removed; waits up to 10s then raises `LockTimeout`; atomic replace); requires sidecar-rs ≥ 0.2.1
 - No XMP import/export
 - Not compatible with v0.1.0 custom SCAR binary files
