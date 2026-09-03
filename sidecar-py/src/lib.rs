@@ -1,10 +1,11 @@
 //! PyO3 bindings exposing the `sidecar` CBOR sidecar library to Python as `sidecar_rs`.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use indexmap::IndexMap;
 use pyo3::create_exception;
-use pyo3::exceptions::{PyException, PyKeyError, PyOverflowError, PyTypeError};
+use pyo3::exceptions::{PyException, PyKeyError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString};
 use pyo3::IntoPyObjectExt;
@@ -12,9 +13,15 @@ use sidecar::conventions::photo;
 use sidecar::{resolve_sidecar_path, SidecarDocument, Value};
 
 create_exception!(_sidecar_rs, SidecarError, PyException);
+create_exception!(_sidecar_rs, LockTimeout, SidecarError);
 
 fn map_err(err: sidecar::SidecarError) -> PyErr {
-    SidecarError::new_err(err.to_string())
+    let message = err.to_string();
+    if matches!(err, sidecar::SidecarError::LockTimeout { .. }) {
+        LockTimeout::new_err(message)
+    } else {
+        SidecarError::new_err(message)
+    }
 }
 
 fn callback_err() -> sidecar::SidecarError {
@@ -150,12 +157,27 @@ impl PySidecarDocument {
     }
 
     /// Load `path` under a file lock, call `updater(doc)`, and atomically save.
+    ///
+    /// `lock_timeout_s` (default 10) is how long to wait for `{path}.lock`.
+    /// On timeout this raises `LockTimeout` (a `SidecarError`) and does not write.
     #[staticmethod]
-    fn update_path(py: Python<'_>, path: PathBuf, updater: &Bound<'_, PyAny>) -> PyResult<()> {
+    #[pyo3(signature = (path, updater, lock_timeout_s = 10.0))]
+    fn update_path(
+        py: Python<'_>,
+        path: PathBuf,
+        updater: &Bound<'_, PyAny>,
+        lock_timeout_s: f64,
+    ) -> PyResult<()> {
+        if !lock_timeout_s.is_finite() || lock_timeout_s < 0.0 {
+            return Err(PyValueError::new_err(
+                "lock_timeout_s must be a finite value >= 0",
+            ));
+        }
+        let timeout = Duration::from_secs_f64(lock_timeout_s);
         let updater = updater.clone().unbind();
         let py_err = std::sync::Mutex::new(None::<PyErr>);
         let rust_result = py.detach(|| {
-            SidecarDocument::update_path(&path, |doc| {
+            SidecarDocument::update_path_with_timeout(&path, timeout, |doc| {
                 Python::attach(|py| {
                     let updater = updater.bind(py);
                     let py_doc = PySidecarDocument {
@@ -335,6 +357,11 @@ fn _sidecar_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySidecarDocument>()?;
     m.add_function(wrap_pyfunction!(py_resolve_sidecar_path, m)?)?;
     m.add("SidecarError", m.py().get_type::<SidecarError>())?;
+    m.add("LockTimeout", m.py().get_type::<LockTimeout>())?;
+    m.add(
+        "DEFAULT_LOCK_TIMEOUT_SECS",
+        sidecar::DEFAULT_LOCK_TIMEOUT.as_secs_f64(),
+    )?;
 
     m.add("MEDIA_BASENAME_KEY", sidecar::MEDIA_BASENAME_KEY)?;
     m.add("SIDECAR_EXTENSION", sidecar::SIDECAR_EXTENSION)?;

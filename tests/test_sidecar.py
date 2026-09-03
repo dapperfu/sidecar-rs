@@ -8,7 +8,13 @@ from pathlib import Path
 import pytest
 
 import sidecar_rs
-from sidecar_rs import SidecarDocument, SidecarError, conventions
+from sidecar_rs import (
+    DEFAULT_LOCK_TIMEOUT_SECS,
+    LockTimeout,
+    SidecarDocument,
+    SidecarError,
+    conventions,
+)
 
 
 def test_scalar_roundtrip_via_bytes() -> None:
@@ -184,6 +190,8 @@ def test_repr() -> None:
 def test_module_constants() -> None:
     assert sidecar_rs.SIDECAR_EXTENSION == "scar"
     assert sidecar_rs.MEDIA_BASENAME_KEY == "_media.basename"
+    assert DEFAULT_LOCK_TIMEOUT_SECS == 10.0
+    assert issubclass(LockTimeout, SidecarError)
 
 
 def test_update_path_merges_namespaces(tmp_path: Path) -> None:
@@ -271,6 +279,35 @@ def test_update_path_removes_lock_file_on_callback_error(tmp_path: Path) -> None
         SidecarDocument.update_path(path, boom)
     assert not path.exists()
     assert not lock_path.exists()
+
+
+def test_update_path_lock_timeout(tmp_path: Path) -> None:
+    import threading
+    import time
+
+    path = tmp_path / "photo.scar"
+    SidecarDocument.update_path(path, lambda doc: doc.set("k", 1))
+    holding = threading.Event()
+    done = threading.Event()
+
+    def hold(doc: SidecarDocument) -> None:
+        holding.set()
+        time.sleep(0.5)
+
+    def holder() -> None:
+        SidecarDocument.update_path(path, hold)
+        done.set()
+
+    thread = threading.Thread(target=holder)
+    thread.start()
+    assert holding.wait(timeout=2.0)
+
+    with pytest.raises(LockTimeout, match="timed out"):
+        SidecarDocument.update_path(path, lambda doc: doc.set("k", 2), lock_timeout_s=0.05)
+
+    thread.join(timeout=3.0)
+    assert done.is_set()
+    assert not (tmp_path / "photo.scar.lock").exists()
 
 
 def test_resolve_sidecar_path_symlink(tmp_path: Path) -> None:
