@@ -152,24 +152,35 @@ impl PySidecarDocument {
     /// Load `path` under a file lock, call `updater(doc)`, and atomically save.
     #[staticmethod]
     fn update_path(py: Python<'_>, path: PathBuf, updater: &Bound<'_, PyAny>) -> PyResult<()> {
-        let py_err = std::cell::Cell::new(None::<PyErr>);
-        let rust_result = SidecarDocument::update_path(&path, |doc| {
-            let py_doc = PySidecarDocument { inner: doc.clone() };
-            let py_obj = match Py::new(py, py_doc) {
-                Ok(obj) => obj,
-                Err(err) => {
-                    py_err.set(Some(err));
-                    return Err(callback_err());
-                }
-            };
-            if let Err(err) = updater.call1((py_obj.clone_ref(py),)) {
-                py_err.set(Some(err));
-                return Err(callback_err());
-            }
-            *doc = py_obj.borrow(py).inner.clone();
-            Ok(())
+        let updater = updater.clone().unbind();
+        let py_err = std::sync::Mutex::new(None::<PyErr>);
+        let rust_result = py.detach(|| {
+            SidecarDocument::update_path(&path, |doc| {
+                Python::attach(|py| {
+                    let updater = updater.bind(py);
+                    let py_doc = PySidecarDocument {
+                        inner: std::mem::take(doc),
+                    };
+                    let py_obj = match Py::new(py, py_doc) {
+                        Ok(obj) => obj,
+                        Err(err) => {
+                            *py_err.lock().expect("python error slot") = Some(err);
+                            return Err(callback_err());
+                        }
+                    };
+                    if let Err(err) = updater.call1((py_obj.clone_ref(py),)) {
+                        *py_err.lock().expect("python error slot") = Some(err);
+                        if let Ok(mut borrowed) = py_obj.try_borrow_mut(py) {
+                            *doc = std::mem::take(&mut borrowed.inner);
+                        }
+                        return Err(callback_err());
+                    }
+                    *doc = std::mem::take(&mut py_obj.borrow_mut(py).inner);
+                    Ok(())
+                })
+            })
         });
-        if let Some(err) = py_err.take() {
+        if let Some(err) = py_err.lock().expect("python error slot").take() {
             return Err(err);
         }
         rust_result.map_err(map_err)
