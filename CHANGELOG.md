@@ -7,6 +7,17 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 The workspace crates (`sidecar`, `sidecar-cli`, `sidecar-py` / Python package
 `sidecar-rs`) share a single version from the root `Cargo.toml`.
 
+## [0.2.5] - 2026-10-07
+
+- `SidecarDocument.edit(path)` is a context manager. It opens `{path}.lock` on
+  enter and deletes that lock file when the block ends, including when the
+  block raises. A successful block writes the sidecar; a failed block does not.
+- Waiting out the lock raises **lockfile timeout** (`LockTimeout`). Callers
+  that are not a queue worker should treat that as a failure. A queue worker
+  can catch it and run the job again.
+- `clear_sidecar_lock(path)` deletes a leftover lock file when nobody holds it,
+  and raises `LockTimeout` when a writer does. It does not read the sidecar.
+
 ## [0.2.4] - 2026-09-02
 
 Patch release for **locked sidecar edits** (workspace `0.2.2` + `0.0.2`).
@@ -176,6 +187,7 @@ older runs. A lock file that persists after 0.2.4 is a writer still inside
 
 - Initial custom binary SCAR format (superseded by 0.2.0).
 
+[0.2.5]: https://github.com/dapperfu/sidecar-rs/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/dapperfu/sidecar-rs/compare/v0.2.1...v0.2.4
 [0.2.2]: https://github.com/dapperfu/sidecar-rs/compare/v0.2.1...39065d0
 [0.2.1]: https://github.com/dapperfu/sidecar-rs/releases/tag/v0.2.1

@@ -10,8 +10,10 @@ pub mod value;
 pub use document::SidecarDocument;
 pub use error::{Result, SidecarError};
 pub use locked_io::{
-    lock_unlock_sidecar, lock_unlock_sidecar_phases, update_path, update_path_with_timeout,
-    with_exclusive_lock, LockPhases, DEFAULT_LOCK_TIMEOUT,
+    clear_lock, lock_path_for, lock_unlock_sidecar, lock_unlock_sidecar_phases, open_for_edit,
+    save_sidecar,
+    update_path, update_path_with_timeout, with_exclusive_lock, ExclusiveLock, LockPhases,
+    DEFAULT_LOCK_TIMEOUT,
 };
 pub use paths::resolve_sidecar_path;
 pub use value::Value;

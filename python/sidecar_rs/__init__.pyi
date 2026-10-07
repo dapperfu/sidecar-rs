@@ -20,7 +20,17 @@ PHOTO_TAGS: str
 DEFAULT_LOCK_TIMEOUT_SECS: float
 
 class SidecarError(Exception): ...
-class LockTimeout(SidecarError): ...
+class LockTimeout(SidecarError):
+    """Raised when `{path}.lock` is still held after the lockfile timeout."""
+
+class SidecarEdit:
+    """Holds `{path}.lock` for a `with` block and deletes it on the way out."""
+
+    def __enter__(self) -> SidecarDocument: ...
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> bool: ...
+
+def clear_sidecar_lock(path: str | PathLike[str], lock_timeout_s: float = 0.0) -> None:
+    """Delete `{path}.lock` when no writer holds it. Raises LockTimeout when one does."""
 
 class SidecarDocument:
     def __init__(self) -> None: ...
@@ -29,6 +39,9 @@ class SidecarDocument:
     @staticmethod
     def from_path(path: str | PathLike[str]) -> SidecarDocument: ...
     @staticmethod
+    def edit(path: str | PathLike[str], lock_timeout_s: float = 10.0) -> SidecarEdit:
+        """Open `{path}.lock` inside a `with` block. Raises LockTimeout before the block."""
+
     def update_path(
         path: str | PathLike[str],
         updater: Callable[[SidecarDocument], None],

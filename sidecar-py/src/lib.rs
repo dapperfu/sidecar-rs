@@ -5,12 +5,17 @@ use std::time::Duration;
 
 use indexmap::IndexMap;
 use pyo3::create_exception;
-use pyo3::exceptions::{PyException, PyKeyError, PyOverflowError, PyTypeError, PyValueError};
+use pyo3::exceptions::{
+    PyException, PyKeyError, PyOverflowError, PyRuntimeError, PyTypeError, PyValueError,
+};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyByteArray, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 use sidecar::conventions::photo;
-use sidecar::{resolve_sidecar_path, SidecarDocument, Value};
+use sidecar::{
+    clear_lock, open_for_edit, resolve_sidecar_path, save_sidecar, ExclusiveLock, SidecarDocument,
+    Value,
+};
 
 create_exception!(_sidecar_rs, SidecarError, PyException);
 create_exception!(_sidecar_rs, LockTimeout, SidecarError);
@@ -154,6 +159,16 @@ impl PySidecarDocument {
     fn from_path(path: PathBuf) -> PyResult<Self> {
         let inner = SidecarDocument::from_path(&path).map_err(map_err)?;
         Ok(Self { inner })
+    }
+
+    /// Open `{path}.lock` for a `with` block. The lock file is deleted when the block ends.
+    ///
+    /// `lock_timeout_s` (default 10) is how long to wait. On timeout this raises
+    /// `LockTimeout` before the block runs, and nothing is written.
+    #[staticmethod]
+    #[pyo3(signature = (path, lock_timeout_s = 10.0))]
+    fn edit(path: PathBuf, lock_timeout_s: f64) -> PyResult<PySidecarEdit> {
+        PySidecarEdit::prepare(path, lock_timeout_s)
     }
 
     /// Load `path` under a file lock, call `updater(doc)`, and atomically save.
@@ -344,6 +359,98 @@ impl PySidecarDocument {
     }
 }
 
+/// Context manager: holds `{path}.lock` for the `with` block, then deletes it.
+#[pyclass(name = "SidecarEdit", module = "sidecar_rs._sidecar_rs")]
+struct PySidecarEdit {
+    path: PathBuf,
+    timeout: Duration,
+    lock: Option<ExclusiveLock>,
+    doc: Option<Py<PySidecarDocument>>,
+}
+
+impl PySidecarEdit {
+    fn prepare(path: PathBuf, lock_timeout_s: f64) -> PyResult<Self> {
+        if !lock_timeout_s.is_finite() || lock_timeout_s < 0.0 {
+            return Err(PyValueError::new_err(
+                "lock_timeout_s must be a finite value >= 0",
+            ));
+        }
+        Ok(Self {
+            path,
+            timeout: Duration::from_secs_f64(lock_timeout_s),
+            lock: None,
+            doc: None,
+        })
+    }
+
+    fn commit(&self, py: Python<'_>) -> PyResult<()> {
+        let Some(doc) = &self.doc else {
+            return Ok(());
+        };
+        let borrowed = doc.borrow(py);
+        save_sidecar(&self.path, &borrowed.inner).map_err(map_err)
+    }
+}
+
+impl Drop for PySidecarEdit {
+    fn drop(&mut self) {
+        // Unlink the lock file if the `with` block ended without __exit__ (for example GC).
+        self.lock.take();
+    }
+}
+
+#[pymethods]
+impl PySidecarEdit {
+    fn __enter__(slf: Py<Self>, py: Python<'_>) -> PyResult<Py<PySidecarDocument>> {
+        let (path, timeout) = {
+            let borrowed = slf.borrow(py);
+            if borrowed.lock.is_some() {
+                return Err(PyRuntimeError::new_err("sidecar edit is already open"));
+            }
+            (borrowed.path.clone(), borrowed.timeout)
+        };
+        let (lock, doc) = py
+            .detach(|| open_for_edit(&path, timeout))
+            .map_err(map_err)?;
+        let py_doc = Py::new(py, PySidecarDocument { inner: doc })?;
+        let mut borrowed = slf.borrow_mut(py);
+        borrowed.lock = Some(lock);
+        borrowed.doc = Some(py_doc.clone_ref(py));
+        Ok(py_doc)
+    }
+
+    #[pyo3(signature = (exc_type=None, exc_value=None, traceback=None))]
+    fn __exit__(
+        &mut self,
+        py: Python<'_>,
+        exc_type: Option<Bound<'_, PyAny>>,
+        exc_value: Option<Bound<'_, PyAny>>,
+        traceback: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<bool> {
+        let _ = (exc_value, traceback);
+        let commit_result = if exc_type.is_none() {
+            self.commit(py)
+        } else {
+            Ok(())
+        };
+        self.lock.take();
+        commit_result?;
+        Ok(false)
+    }
+}
+
+#[pyfunction]
+#[pyo3(name = "clear_sidecar_lock", signature = (path, lock_timeout_s = 0.0))]
+fn clear_sidecar_lock(py: Python<'_>, path: PathBuf, lock_timeout_s: f64) -> PyResult<()> {
+    if !lock_timeout_s.is_finite() || lock_timeout_s < 0.0 {
+        return Err(PyValueError::new_err(
+            "lock_timeout_s must be a finite value >= 0",
+        ));
+    }
+    let timeout = Duration::from_secs_f64(lock_timeout_s);
+    py.detach(|| clear_lock(&path, timeout)).map_err(map_err)
+}
+
 #[pyfunction]
 #[pyo3(name = "resolve_sidecar_path")]
 fn py_resolve_sidecar_path(path: &str) -> PyResult<String> {
@@ -355,7 +462,9 @@ fn py_resolve_sidecar_path(path: &str) -> PyResult<String> {
 #[pymodule]
 fn _sidecar_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySidecarDocument>()?;
+    m.add_class::<PySidecarEdit>()?;
     m.add_function(wrap_pyfunction!(py_resolve_sidecar_path, m)?)?;
+    m.add_function(wrap_pyfunction!(clear_sidecar_lock, m)?)?;
     m.add("SidecarError", m.py().get_type::<SidecarError>())?;
     m.add("LockTimeout", m.py().get_type::<LockTimeout>())?;
     m.add(

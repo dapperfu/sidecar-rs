@@ -119,13 +119,13 @@ make clean    # remove artifacts
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for release history. The current workspace
-version is **0.2.4**.
+version is **0.2.5**.
 
 ## Limitations
 
 - Map keys must be strings (CBOR text keys)
 - Integer values are stored as CBOR integers (canonical `Integer` type on read)
 - `set_f32` / `set_f64` both round-trip as CBOR floats; `set_i64` / `set_u64` as integers
-- Concurrent updates: use `SidecarDocument.update_path(path, updater, lock_timeout_s=10)` (exclusive `{path}.lock` during the write, then the lock file is removed; waits up to 10s then raises `LockTimeout`; atomic replace); requires sidecar-rs ≥ 0.2.4
+- Concurrent updates: `with SidecarDocument.edit(path) as doc:` holds `{path}.lock` only for the block and deletes it when the block ends. `update_path` does the same around its callback. Either waits up to 10s (`lock_timeout_s`) and then raises `LockTimeout` ("lockfile timeout") without writing. Requires sidecar-rs ≥ 0.2.5 for `edit`.
 - No XMP import/export
 - Not compatible with v0.1.0 custom SCAR binary files

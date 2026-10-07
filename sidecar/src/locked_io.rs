@@ -43,28 +43,46 @@ where
     F: FnMut(&mut SidecarDocument) -> Result<()>,
 {
     let path = path.as_ref();
+    let (lock, mut doc) = open_for_edit(path, timeout)?;
+    let result = (|| {
+        apply(&mut doc)?;
+        save_sidecar(path, &doc)
+    })();
+    drop(lock);
+    result
+}
+
+/// Lock `{path}.lock` and load the sidecar. Drop the returned [`ExclusiveLock`] to delete the lock file.
+pub fn open_for_edit(path: &Path, timeout: Duration) -> Result<(ExclusiveLock, SidecarDocument)> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent)?;
         }
     }
-    with_exclusive_lock(path, timeout, || {
-        let mut doc = match std::fs::metadata(path) {
-            Ok(meta) if meta.is_file() && meta.len() > 0 => SidecarDocument::from_path(path)?,
-            Ok(_) => SidecarDocument::new(),
-            Err(err) if err.kind() == ErrorKind::NotFound => SidecarDocument::new(),
-            Err(err) => return Err(err.into()),
-        };
+    let lock = acquire_exclusive_lock(&lock_path_for(path), timeout)?;
+    let doc = match std::fs::metadata(path) {
+        Ok(meta) if meta.is_file() && meta.len() > 0 => SidecarDocument::from_path(path)?,
+        Ok(_) => SidecarDocument::new(),
+        Err(err) if err.kind() == ErrorKind::NotFound => SidecarDocument::new(),
+        Err(err) => return Err(err.into()),
+    };
+    Ok((lock, doc))
+}
 
-        apply(&mut doc)?;
-
-        let tmp_path = temp_path_for(path);
-        let write_result = write_sidecar_atomic(path, &tmp_path, &doc);
-        if write_result.is_err() {
-            let _ = std::fs::remove_file(&tmp_path);
-        }
-        write_result
-    })
+/// Atomically replace `path` with `doc`. Does not `fsync`.
+pub fn save_sidecar(path: &Path, doc: &SidecarDocument) -> Result<()> {
+    let tmp_path = temp_path_for(path);
+    let mut buf = Vec::new();
+    doc.to_writer(&mut buf)?;
+    let write_result = (|| {
+        std::fs::write(&tmp_path, &buf)?;
+        std::fs::rename(&tmp_path, path)?;
+        Ok(())
+    })();
+    if write_result.is_err() {
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+    write_result
 }
 
 /// Hold `{sidecar}.lock` for the duration of `f`, then unlink and release.
@@ -77,6 +95,15 @@ where
     let lock_path = lock_path_for(sidecar_path);
     let _lock = acquire_exclusive_lock(&lock_path, timeout)?;
     f()
+}
+
+/// Take `{path}.lock` and immediately drop it, which deletes the lock file.
+///
+/// Fails with a lockfile timeout when another writer holds the lock.
+/// Does not read or write the sidecar.
+pub fn clear_lock(path: &Path, timeout: Duration) -> Result<()> {
+    let _lock = acquire_exclusive_lock(&lock_path_for(path), timeout)?;
+    Ok(())
 }
 
 /// Create, exclusive-lock, unlock, and delete `{path}.lock` without reading the sidecar.
@@ -169,7 +196,8 @@ fn lock_file_is_current(file: &File, lock_path: &Path) -> Result<bool> {
     }
 }
 
-struct ExclusiveLock {
+/// Holds `{path}.lock`. Dropping it unlinks the lock file while the flock is still held.
+pub struct ExclusiveLock {
     path: PathBuf,
     _file: File,
 }
@@ -180,15 +208,7 @@ impl Drop for ExclusiveLock {
     }
 }
 
-fn write_sidecar_atomic(path: &Path, tmp_path: &Path, doc: &SidecarDocument) -> Result<()> {
-    let mut buf = Vec::new();
-    doc.to_writer(&mut buf)?;
-    std::fs::write(tmp_path, buf)?;
-    std::fs::rename(tmp_path, path)?;
-    Ok(())
-}
-
-fn lock_path_for(path: &Path) -> PathBuf {
+pub fn lock_path_for(path: &Path) -> PathBuf {
     PathBuf::from(format!("{}.lock", path.display()))
 }
 
@@ -356,6 +376,20 @@ mod tests {
             other => panic!("expected LockTimeout, got {other:?}"),
         }
         handle.join().unwrap().unwrap();
+        assert!(!lock_path_for(&path).exists());
+    }
+
+    #[test]
+    #[test]
+    fn open_for_edit_removes_lock_when_the_guard_drops() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("photo.scar");
+        let (lock, mut doc) = open_for_edit(&path, DEFAULT_LOCK_TIMEOUT).unwrap();
+        doc.set("k", Value::Integer(1)).unwrap();
+        save_sidecar(&path, &doc).unwrap();
+        assert!(lock_path_for(&path).exists());
+        drop(lock);
+        assert!(path.is_file());
         assert!(!lock_path_for(&path).exists());
     }
 

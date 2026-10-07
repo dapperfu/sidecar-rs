@@ -302,12 +302,94 @@ def test_update_path_lock_timeout(tmp_path: Path) -> None:
     thread.start()
     assert holding.wait(timeout=2.0)
 
-    with pytest.raises(LockTimeout, match="timed out"):
+    with pytest.raises(LockTimeout, match="lockfile timeout"):
         SidecarDocument.update_path(path, lambda doc: doc.set("k", 2), lock_timeout_s=0.05)
 
     thread.join(timeout=3.0)
     assert done.is_set()
     assert not (tmp_path / "photo.scar.lock").exists()
+
+
+def test_edit_context_deletes_lock_file(tmp_path: Path) -> None:
+    path = tmp_path / "photo.scar"
+    lock_path = tmp_path / "photo.scar.lock"
+
+    with SidecarDocument.edit(path) as doc:
+        assert lock_path.exists()
+        doc.set("k", 1)
+
+    assert path.is_file()
+    assert not lock_path.exists()
+    assert SidecarDocument.from_path(path)["k"] == 1
+
+
+def test_edit_context_discards_changes_and_deletes_lock_on_error(tmp_path: Path) -> None:
+    path = tmp_path / "photo.scar"
+    lock_path = tmp_path / "photo.scar.lock"
+    with SidecarDocument.edit(path) as doc:
+        doc.set("k", 1)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        with SidecarDocument.edit(path) as doc:
+            assert lock_path.exists()
+            doc.set("k", 2)
+            raise RuntimeError("boom")
+
+    assert SidecarDocument.from_path(path)["k"] == 1
+    assert not lock_path.exists()
+
+
+def test_edit_lockfile_timeout(tmp_path: Path) -> None:
+    import threading
+    import time
+
+    path = tmp_path / "photo.scar"
+    holding = threading.Event()
+    release = threading.Event()
+
+    def holder() -> None:
+        with SidecarDocument.edit(path) as doc:
+            doc.set("k", 1)
+            holding.set()
+            assert release.wait(timeout=2.0)
+
+    thread = threading.Thread(target=holder)
+    thread.start()
+    assert holding.wait(timeout=2.0)
+    with pytest.raises(LockTimeout, match="lockfile timeout"):
+        with SidecarDocument.edit(path, lock_timeout_s=0.05) as doc:
+            doc.set("k", 2)
+    release.set()
+    thread.join(timeout=3.0)
+    assert SidecarDocument.from_path(path)["k"] == 1
+    assert not (tmp_path / "photo.scar.lock").exists()
+
+
+def test_clear_sidecar_lock_keeps_a_held_lock(tmp_path: Path) -> None:
+    import threading
+
+    from sidecar_rs import clear_sidecar_lock
+
+    path = tmp_path / "photo.scar"
+    lock_path = tmp_path / "photo.scar.lock"
+    holding = threading.Event()
+    release = threading.Event()
+
+    def holder() -> None:
+        with SidecarDocument.edit(path, lock_timeout_s=1.0):
+            holding.set()
+            assert release.wait(timeout=2.0)
+
+    thread = threading.Thread(target=holder)
+    thread.start()
+    assert holding.wait(timeout=2.0)
+    with pytest.raises(LockTimeout):
+        clear_sidecar_lock(path, lock_timeout_s=0.0)
+    assert lock_path.exists()
+    release.set()
+    thread.join(timeout=3.0)
+    clear_sidecar_lock(path, lock_timeout_s=1.0)
+    assert not lock_path.exists()
 
 
 def test_resolve_sidecar_path_symlink(tmp_path: Path) -> None:

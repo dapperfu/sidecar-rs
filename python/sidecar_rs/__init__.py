@@ -13,17 +13,21 @@ from ._sidecar_rs import (
     SIDECAR_EXTENSION,
     LockTimeout,
     SidecarDocument,
+    SidecarEdit,
     SidecarError,
+    clear_sidecar_lock,
     resolve_sidecar_path,
 )
 
 __all__ = [
     "DEFAULT_LOCK_TIMEOUT_SECS",
     "SidecarDocument",
+    "SidecarEdit",
     "SidecarError",
     "LockTimeout",
     "MEDIA_BASENAME_KEY",
     "SIDECAR_EXTENSION",
+    "clear_sidecar_lock",
     "conventions",
     "resolve_sidecar_path",
 ]

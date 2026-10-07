@@ -9,7 +9,7 @@ pub enum SidecarError {
     Io(#[from] std::io::Error),
 
     #[error(
-        "timed out after {:.3}s waiting for exclusive lock on {}",
+        "lockfile timeout after {:.3}s waiting for exclusive lock on {}",
         timeout.as_secs_f64(),
         path.display()
     )]
@@ -55,6 +55,7 @@ mod tests {
             timeout: Duration::from_secs(10),
         };
         let text = err.to_string();
+        assert!(text.contains("lockfile timeout"));
         assert!(text.contains("10"));
         assert!(text.contains("photo.scar.lock"));
     }
